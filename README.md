@@ -1,1 +1,1 @@
-# actix-diesel-r2d2-todo
+# Todo App using Actix-Web and Diesel as ORM
