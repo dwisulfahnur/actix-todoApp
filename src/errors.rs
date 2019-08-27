@@ -1,21 +1,23 @@
-use actix_web::{error::{ResponseError, ParseError}, HttpResponse};
+use actix_web::{error::{ResponseError, ParseError, PayloadError, JsonPayloadError, ContentTypeError}, http, HttpResponse};
 use derive_more::Display;
 use serde_derive::Serialize;
 use diesel::result::{DatabaseErrorKind, Error as DBError};
 use std::convert::From;
 
-#[derive(Debug, Display)]
+use crate::failure;
+
+#[derive(Fail, Debug)]
 pub enum ServiceError {
-    #[display(fmt = "Internal Server Error")]
+    #[fail(display = "Internal Server Error")]
     InternalServerError,
 
-    #[display(fmt = "BadRequest: {}", _0)]
+    #[fail(display = "BadRequest: {}", _0)]
     BadRequest(String),
 
-    #[display(fmt = "Not Found")]
+    #[fail(display = "Not Found")]
     NotFound(String),
 
-    #[display(fmt = "Unauthorized")]
+    #[fail(display = "Unauthorized")]
     Unauthorized,
 }
 
@@ -28,14 +30,14 @@ struct ErrorResponseModel {
 // impl ResponseError trait allows to convert our errors into http responses with appropriate data
 impl ResponseError for ServiceError {
     fn error_response(&self) -> HttpResponse {
-        match self {
+        match *self {
             ServiceError::InternalServerError => {
-                let err = ErrorResponseModel{
+                let err = ErrorResponseModel {
                     code: 500,
                     message: "Internal Server Error, Please try later".to_string(),
                 };
                 HttpResponse::InternalServerError().json(err)
-            },
+            }
             ServiceError::BadRequest(ref message) => {
                 let err = ErrorResponseModel {
                     code: 400,
@@ -44,16 +46,16 @@ impl ResponseError for ServiceError {
                 HttpResponse::BadRequest().json(err)
             }
             ServiceError::Unauthorized => {
-                let err = ErrorResponseModel{
+                let err = ErrorResponseModel {
                     code: 401,
-                    message: "Unauthorized".to_string()
+                    message: "Unauthorized".to_string(),
                 };
                 HttpResponse::Unauthorized().json(err)
             }
             ServiceError::NotFound(ref message) => {
-                let err = ErrorResponseModel{
+                let err = ErrorResponseModel {
                     code: 404,
-                    message: message.to_string()
+                    message: message.to_string(),
                 };
                 HttpResponse::NotFound().json(err)
             }
@@ -63,15 +65,25 @@ impl ResponseError for ServiceError {
 
 
 impl From<ParseError> for ServiceError {
-    fn from(_: ParseError) -> ServiceError {
-        ServiceError::BadRequest("Bad Request".to_string())
+    fn from(err: ParseError) -> ServiceError {
+        ServiceError::BadRequest(format!("Bad Request: {}", err.to_string()).to_string())
+    }
+}
+
+impl From<PayloadError> for ServiceError {
+    fn from(err: PayloadError) -> ServiceError {
+        ServiceError::BadRequest(err.to_string())
+    }
+}
+
+impl From<JsonPayloadError> for ServiceError {
+    fn from(err: JsonPayloadError) -> ServiceError {
+        ServiceError::BadRequest(err.to_string())
     }
 }
 
 impl From<DBError> for ServiceError {
     fn from(error: DBError) -> ServiceError {
-        // Right now we just care about UniqueViolation from diesel
-        // But this would be helpful to easily map errors as our app grows
         match error {
             DBError::DatabaseError(kind, info) => {
                 if let DatabaseErrorKind::UniqueViolation = kind {

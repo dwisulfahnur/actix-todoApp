@@ -7,6 +7,9 @@ extern crate validator;
 extern crate serde_derive;
 extern crate serde_json;
 
+#[macro_use]
+extern crate failure;
+
 use crate::config::config_app;
 
 use actix_web::{middleware, App, HttpServer};
